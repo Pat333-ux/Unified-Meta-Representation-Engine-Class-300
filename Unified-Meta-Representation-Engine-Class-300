@@ -1,0 +1,113 @@
+// Unified-System-Sovereign-Meta-Representation-Engine-Class-300.ts
+
+export type SovereignRepresentationState = {
+  organismId: string;
+  representationSeed: string;                 // deterministic representation seed
+  representationVector: ReadonlyArray<number>; // structured internal model vector
+  revision: number;
+  representationHash: string;
+  lastUpdatedAt: string;
+};
+
+export type SovereignRepresentationEvent =
+  | { type: 'REPRESENTATION_SEED_UPDATED'; seed: string }
+  | { type: 'REPRESENTATION_VECTOR_UPDATED'; vector: ReadonlyArray<number> }
+  | { type: 'REPRESENTATION_REVISION_INCREMENTED' };
+
+export interface SovereignRepresentationPersistence {
+  loadRepresentationState(organismId: string): Promise<SovereignRepresentationState | null>;
+  saveRepresentationState(state: SovereignRepresentationState): Promise<void>;
+}
+
+export class SovereignMetaRepresentationEngineClass300 {
+  constructor(
+    private readonly persistence: SovereignRepresentationPersistence,
+  ) {}
+
+  async initializeRepresentation(
+    organismId: string,
+    initialSeed: string,
+  ): Promise<SovereignRepresentationState> {
+    const existing = await this.persistence.loadRepresentationState(organismId);
+    if (existing) return existing;
+
+    const initialVector = [4, 2, 1]; // deterministic representation seed vector
+
+    const initial: SovereignRepresentationState = {
+      organismId,
+      representationSeed: initialSeed,
+      representationVector: initialVector,
+      revision: 1,
+      representationHash: this.computeRepresentationHash(initialSeed, initialVector, 1),
+      lastUpdatedAt: new Date().toISOString(),
+    };
+
+    await this.persistence.saveRepresentationState(initial);
+    return initial;
+  }
+
+  async applyEvent(
+    state: SovereignRepresentationState,
+    event: SovereignRepresentationEvent,
+  ): Promise<SovereignRepresentationState> {
+    switch (event.type) {
+      case 'REPRESENTATION_SEED_UPDATED': {
+        const nextSeed = event.seed;
+        const next: SovereignRepresentationState = {
+          ...state,
+          representationSeed: nextSeed,
+          representationHash: this.computeRepresentationHash(nextSeed, state.representationVector, state.revision),
+          lastUpdatedAt: new Date().toISOString(),
+        };
+        await this.persistence.saveRepresentationState(next);
+        return next;
+      }
+
+      case 'REPRESENTATION_VECTOR_UPDATED': {
+        const nextVector = [...event.vector];
+        const next: SovereignRepresentationState = {
+          ...state,
+          representationVector: nextVector,
+          representationHash: this.computeRepresentationHash(state.representationSeed, nextVector, state.revision),
+          lastUpdatedAt: new Date().toISOString(),
+        };
+        await this.persistence.saveRepresentationState(next);
+        return next;
+      }
+
+      case 'REPRESENTATION_REVISION_INCREMENTED': {
+        const nextRevision = state.revision + 1;
+        const next: SovereignRepresentationState = {
+          ...state,
+          revision: nextRevision,
+          representationHash: this.computeRepresentationHash(
+            state.representationSeed,
+            state.representationVector,
+            nextRevision,
+          ),
+          lastUpdatedAt: new Date().toISOString(),
+        };
+        await this.persistence.saveRepresentationState(next);
+        return next;
+      }
+
+      default:
+        return state;
+    }
+  }
+
+  private computeRepresentationHash(
+    seed: string,
+    vector: ReadonlyArray<number>,
+    revision: number,
+  ): string {
+    const input = `${seed}|${vector.join(',')}|${revision}`;
+    let hash = 0;
+    for (let i = 0; i < input.length; i++) {
+      const chr = input.charCodeAt(i);
+      hash = (hash << 5) - hash + chr;
+      hash |= 0;
+    }
+    return `REPRESENTATION-${hash}`;
+  }
+}
